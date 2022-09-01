@@ -1,4 +1,3 @@
-var _a;
 function _SUNOR_styled_log(title = 'Sunor', text = '') {
     console.log(`%c${title}%c${text}`, "background-color: rgb(70,35,230); color:white; padding: 1px 6px 1px 8px; border-radius: 2px 0px 0px 2px;", "background-color:  rgb(20,30,40);padding: 1px 6px 1px 8px; border-radius: 0px 2px 2px 0px; color:white;");
 }
@@ -33,7 +32,7 @@ class UpdateTask {
 }
 class DepTask {
 }
-export class Global {
+export class TaskQueue {
     constructor() {
         this.$update_queue = [];
         this.$will_flush = false;
@@ -107,50 +106,68 @@ export class List extends Box {
         return this.$array;
     }
 }
-export class ViewFragment {
-    constructor(boxs = []) {
-        this.$global = undefined;
-        this.$render = () => [];
-        this.$boxs = boxs;
-        const h1 = document.createElement("h1");
-        const h2 = document.createElement("h2");
-        this.$render = () => {
-            h1.textContent = `Hello Sunor ${boxs[0].$inner_value}`;
-            h2.textContent = `${boxs[0].$inner_value} + ${boxs[1].$inner_value} = ${boxs[0].$inner_value + boxs[1].$inner_value}`;
-            return [
-                h1,
-                h2
-            ];
-        };
-        this.$update_render = boxs[0].$update_render = () => {
-            h1.textContent = `Hello Sunor ${boxs[0].$inner_value}`;
-            h2.textContent = `${boxs[0].$inner_value} + ${boxs[1].$inner_value} = ${boxs[0].$inner_value + boxs[1].$inner_value}`;
-        };
+function N(tagName, textContent = "", children = []) {
+    let subs = [];
+    const root = document.createElement(tagName);
+    root.textContent = textContent;
+    for (const [node, sub] of children) {
+        root.appendChild(node);
+        subs = subs.concat(sub);
     }
-    set global(global) {
-        this.$global = global;
-        this.$boxs.forEach(box => box.fragment = this);
+    return [root, subs];
+}
+export class ViewFragment {
+    constructor(setup) {
+        this.$tasks_queue = new TaskQueue();
+        this.$roots = [];
+        const res = setup();
+        this.$boxs = res.boxs;
+        for (const [node, _subs] of res.nodes)
+            if (node instanceof HTMLElement)
+                this.$roots.push(node);
+        this.$update_render = res.update;
     }
     $box_update_notify(box) {
-        var _a;
-        (_a = this.$global) === null || _a === void 0 ? void 0 : _a.$add_task(new UpdateTask(this.$update_render));
+        this.$tasks_queue.$add_task(new UpdateTask(this.$update_render));
     }
-    mount(global, dom) {
-        this.global = global;
-        const arr = this.$render();
-        for (const elem of arr) {
-            dom.appendChild(elem);
-        }
+    mount(dom) {
+        this.$boxs.forEach(box => box.fragment = this);
+        if (this.$roots !== undefined)
+            for (const elem of this.$roots) {
+                dom.appendChild(elem);
+            }
+        this.$update_render();
     }
 }
-const b = new Value(1);
-const b1 = new Value(1);
-const v = new ViewFragment([b, b1]);
+// TEST
+function View() {
+    return new ViewFragment(() => {
+        const box1 = new Value(1);
+        const box2 = new Value(1);
+        const box3 = new Value("Sunor");
+        const h1 = N("h1");
+        const h2 = N("h2");
+        const textarea = N("textarea");
+        const div = N("div", "parent", [textarea]);
+        const button = N("button", "+");
+        const update = () => {
+            h1[0].textContent = `Hello Sunor ${box1.$inner_value}`;
+            h2[0].textContent = `${box1.$inner_value} + ${box2.$inner_value} = ${box1.$inner_value + box2.$inner_value}`;
+            textarea[0].value = box3.$inner_value;
+        };
+        button[0].addEventListener("click", () => {
+            box1.set(box1.get().un_wrap() + 1);
+            box2.set(box2.get().un_wrap() + 2);
+            box3.set(`Sunor ${box1.get().un_wrap() + box2.get().un_wrap()}`);
+        });
+        return {
+            "boxs": [box1, box2, box3],
+            "nodes": [h1, h2, div, button],
+            "update": update
+        };
+    });
+}
+const v = View();
 const mt = document.getElementById("test");
-const g = new Global();
 if (mt !== null)
-    v.mount(g, mt);
-(_a = document.getElementById("button")) === null || _a === void 0 ? void 0 : _a.addEventListener("click", () => {
-    b.set(b.get().un_wrap() + 1);
-    b.set(b.get().un_wrap() + 2);
-});
+    v.mount(mt);
